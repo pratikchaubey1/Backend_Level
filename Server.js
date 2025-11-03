@@ -3,14 +3,53 @@ const cors = require('cors');
 require('dotenv').config();
 const connectdb = require('./Config/DB');
 const UserRouter = require('./Routers/UserRouter');
-
+const session = require('express-session');
+const MongoStore = require('connect-mongo');
+const Helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 connectdb();
 
 const app = express();
 
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: process.env.NODE_ENV === 'PRODUCTION' ? 100 : 1000,
+  message: {
+    success: false,
+    message: 'Too many requests from this IP, please try again later.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+app.use('/api/', limiter);
+app.use(Helmet());
+app.use(session({
+  name: 'sessionId',
+  secret: process.env.SESSION_SECRET || 'fallback-secret-change-in-PRODUCTION',
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGODB_URL,
+    collectionName: 'sessions',
+    ttl: 7 * 24 * 60 * 60 // 7 days
+  }),
+  cookie: {
+    secure: process.env.NODE_ENV === 'PRODUCTION',
+    httpOnly: true,
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    sameSite: process.env.NODE_ENV === 'PRODUCTION' ? 'none' : 'lax'
+  }
+}));
+app.use(express.json({ limit: '30mb' }));
+app.use(express.urlencoded({ extended: true, limit: '30mb' }));
+
+
+
 // CORS (handle preflight too)
 const corsOptions = {
-  origin: true, // reflect request origin
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  origin: ['https://my-level.vercel.app','http://localhost:5173'], // reflect request origin
   credentials: true,
 };
 app.use(cors(corsOptions));
@@ -25,9 +64,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Body parsers
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/auth', UserRouter);
