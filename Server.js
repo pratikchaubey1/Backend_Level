@@ -3,11 +3,17 @@ const cors = require('cors');
 require('dotenv').config();
 const connectdb = require('./Config/DB');
 const UserRouter = require('./Routers/UserRouter');
+const AdminRouter = require('./Routers/AdminRouter');
+const ProductRouter = require('./Routers/ProductRouter');
+const { seedInitialProducts } = require('./Controllers/ProductController');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const Helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 connectdb();
+
+// Seed initial products (runs only if no products exist yet)
+seedInitialProducts().catch((err) => console.error('Product seeding error:', err.message));
 
 const app = express();
 
@@ -48,7 +54,8 @@ app.use(express.urlencoded({ extended: true, limit: '30mb' }));
 // CORS (handle preflight too)
 const corsOptions = {
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  // Allow custom header sent by frontend axios client
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Website-Name'],
   origin: ['https://my-level.vercel.app','http://localhost:5173'], // reflect request origin
   credentials: true,
 };
@@ -67,6 +74,8 @@ app.use((req, res, next) => {
 
 // Routes
 app.use('/api/auth', UserRouter);
+app.use('/api/admin', AdminRouter);
+app.use('/api/products', ProductRouter);
 
 app.get('/', (request, response) => {
   response.send("Hello Level we are here");
